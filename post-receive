@@ -1,0 +1,62 @@
+#! /bin/bash
+
+set -e
+
+
+# Load env stored when staring server (see run.sh).
+source /home/git/post-receive.env
+
+
+_doRelease() {
+  local rev="$1"
+  local tmpdir="/tmp/$rev"
+
+  echo "Releasing new version (rev: ${rev})"
+
+  mkdir -p "$tmpdir"
+  git clone /home/git/repo.git "$tmpdir/"
+
+  if [[ ! -d "$RELEASE_DEST" ]]; then
+    echo "${RELEASE_DEST} does not exist. Creating it..."
+    mkdir -p "$RELEASE_DEST"
+  else
+    echo "${RELEASE_DEST} already exists. Emptying it..."
+    rm -rf "$RELEASE_DEST"/*
+  fi
+
+  local src=$tmpdir
+
+  if [[ "$RELEASE_SRC" != "" ]]; then
+    local src="$tmpdir/$RELEASE_SRC"
+  fi
+
+  echo "Copying files from ${src} to ${RELEASE_DEST}..."
+  cp -r "$src"/* "$RELEASE_DEST"/
+  rm -rf "$RELEASE_DEST"/.git*
+
+  echo "Updating release state..."
+  echo "$rev" > "$RELEASE_DEST/.rocoto-release-state"
+
+  echo "Cleaning up temporary files..."
+  rm -rf "$tmpdir"
+
+  echo "Completed release: $rev"
+}
+
+
+# http://stackoverflow.com/a/13057643/374331
+while read oldrev newrev refname; do
+  #echo "oldrev: $oldrev"
+  #echo "newrev: $newrev"
+  #echo "refname: $refname"
+
+  branch=$(git rev-parse --symbolic --abbrev-ref $refname)
+  #echo "branch: $branch"
+
+  if [ "$RELEASE_BRANCH" == "$branch" ]; then
+    _doRelease $newrev
+  else
+    echo "Not in release branch. Ignoring release..."
+  fi
+done
+
